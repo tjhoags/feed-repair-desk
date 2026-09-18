@@ -1,0 +1,898 @@
+{
+  "fixture_format_version": "1.0.0",
+  "product": "Feed Repair Desk",
+  "synthetic": true,
+  "purpose": "Independent behavioral acceptance cases; adapters may map the semantics to the application schema without weakening expected outcomes.",
+  "conventions": {
+    "profile": "basic-product-feed-fixture-v1",
+    "profile_date": "2026-09-17",
+    "required_columns": [
+      "id",
+      "title",
+      "price",
+      "availability",
+      "link"
+    ],
+    "optional_profile_columns": [
+      "gtin"
+    ],
+    "extra_columns": "preserve without interpretation",
+    "supported_dialect": "UTF-8 comma-separated CSV, header required, LF or CRLF record endings, RFC-style double-quote escaping",
+    "logical_record_numbers": "one-based data records, excluding header; embedded newlines do not increment the logical record index",
+    "column_indexes": "zero-based only where explicitly given; otherwise use an unambiguous header mapping",
+    "all_cell_values": "strings, including IDs and GTINs; empty cell is empty string",
+    "source_hash": "SHA-256 over original UTF-8 bytes including BOM and line-ending differences; no normalization before hashing",
+    "availability_canonical": [
+      "in_stock",
+      "out_of_stock",
+      "preorder",
+      "backorder"
+    ],
+    "availability_map_required_by_fixture": {
+      "In Stock": "in_stock",
+      "out of stock": "out_of_stock"
+    },
+    "issue_codes": "semantic labels, not required implementation names; diagnostic wording may differ",
+    "counts": "one row-level issue per failed profile field/rule; formula-risk is a separate export-safety rule; duplicate-ID group and affected-row counts stay distinct",
+    "formula_policy": "Block CSV export for unresolved trigger-leading cells or headers. Detection ignores leading ASCII whitespace/control characters and recognizes = + - @ plus their full-width counterparts; preserve original text. This bounded policy is not a universal spreadsheet safety guarantee.",
+    "ordinary_unresolved_facts": "may remain in explicitly labeled export with accompanying issue report; no rows silently removed; unresolved formula risks block CSV",
+    "job_integrity": "source, profile/version, working cells, active changes, decision/undo state and exceptions must agree; source hashes are consistency checks, not signatures",
+    "byte_identical_reserialization_required": false,
+    "external_truth": "No live URL, inventory, GTIN ownership or merchant approval is proven by a locally passing fixture."
+  },
+  "cases": [
+    {
+      "id": "quoting-and-string-preservation",
+      "sources": [
+        {
+          "id": "lf",
+          "source": {
+            "text": "id,title,price,availability,link,gtin,notes\n000123,\"Lamp, \"\"Studio\"\"\",20.00 USD,in_stock,https://example.invalid/p/000123,,Café\nsku-002,\"Shelf\nTwo tiers\",20.00 USD,in_stock,https://example.invalid/p/sku-002,,  keep both spaces  \n",
+            "encoding": "UTF-8",
+            "sha256": "de05f5bf8bc04a6c35ccefbf447ced64e633ac9d4279f6e9852660e37757df5d"
+          }
+        },
+        {
+          "id": "crlf",
+          "source": {
+            "text": "id,title,price,availability,link,gtin,notes\r\n000123,\"Lamp, \"\"Studio\"\"\",20.00 USD,in_stock,https://example.invalid/p/000123,,Café\r\nsku-002,\"Shelf\nTwo tiers\",20.00 USD,in_stock,https://example.invalid/p/sku-002,,  keep both spaces  \r\n",
+            "encoding": "UTF-8",
+            "sha256": "74d59849289ae5f98a00a743cd411bfe1c37d2ca4101045ba7222d0fcf7e6fa3"
+          }
+        },
+        {
+          "id": "utf8-bom",
+          "source": {
+            "text": "﻿id,title,price,availability,link,gtin,notes\n000123,\"Lamp, \"\"Studio\"\"\",20.00 USD,in_stock,https://example.invalid/p/000123,,Café\nsku-002,\"Shelf\nTwo tiers\",20.00 USD,in_stock,https://example.invalid/p/sku-002,,  keep both spaces  \n",
+            "encoding": "UTF-8",
+            "sha256": "25f2baa07fa31f45849f87d3bba831974e8c0be77c6aca5ba0d5f2320a3c2f69"
+          }
+        },
+        {
+          "id": "no-final-newline",
+          "source": {
+            "text": "id,title,price,availability,link,gtin,notes\n000123,\"Lamp, \"\"Studio\"\"\",20.00 USD,in_stock,https://example.invalid/p/000123,,Café\nsku-002,\"Shelf\nTwo tiers\",20.00 USD,in_stock,https://example.invalid/p/sku-002,,  keep both spaces  ",
+            "encoding": "UTF-8",
+            "sha256": "d33b5b5ac9519a3cb24a61ff4df1a0cf5e9e907ab87f8a91ae8f945c1742a7ce"
+          }
+        }
+      ],
+      "expected": {
+        "parse_status": "valid",
+        "headers": [
+          "id",
+          "title",
+          "price",
+          "availability",
+          "link",
+          "gtin",
+          "notes"
+        ],
+        "records": [
+          [
+            "000123",
+            "Lamp, \"Studio\"",
+            "20.00 USD",
+            "in_stock",
+            "https://example.invalid/p/000123",
+            "",
+            "Café"
+          ],
+          [
+            "sku-002",
+            "Shelf\nTwo tiers",
+            "20.00 USD",
+            "in_stock",
+            "https://example.invalid/p/sku-002",
+            "",
+            "  keep both spaces  "
+          ]
+        ],
+        "data_record_count": 2,
+        "mutation_count": 0,
+        "id_type": "string",
+        "first_id": "000123",
+        "empty_gtin_preserved": true,
+        "source_original_utf8_preserved": true,
+        "export_reparse_matrix_equals_input": true,
+        "byte_identical_csv_export_required": false,
+        "logical_title_location": {
+          "record": 2,
+          "column": "title",
+          "value": "Shelf\nTwo tiers"
+        }
+      },
+      "checks": [
+        "Embedded newline belongs to one logical record, never a new product.",
+        "A BOM is removed only from the beginning of the encoded document, not cell contents.",
+        "Unknown columns, row order, non-ASCII values and spaces survive."
+      ]
+    },
+    {
+      "id": "structural-failures",
+      "variants": [
+        {
+          "id": "unclosed-quote",
+          "source": {
+            "text": "id,title,price,availability,link\n000123,\"Unclosed title,20.00 USD,in_stock,https://example.invalid/p/000123\n",
+            "encoding": "UTF-8",
+            "sha256": "73a5c2c90d43685a9b5f80b1da25aa1a92a81487a066af68830bd3aa99dbf9b6"
+          },
+          "expected_status": "parse_error"
+        },
+        {
+          "id": "extra-cell",
+          "source": {
+            "text": "id,title,price,availability,link\n000123,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/000123,unexpected\n",
+            "encoding": "UTF-8",
+            "sha256": "10041420048387f966a1820ff4da839e740ab926fb3af2123886ec2f0623f87b"
+          },
+          "expected_status": "row_width_error"
+        },
+        {
+          "id": "missing-cell",
+          "source": {
+            "text": "id,title,price,availability,link\n000123,Desk lamp,20.00 USD,in_stock\n",
+            "encoding": "UTF-8",
+            "sha256": "a90ac6ae3df2d9a2d99c44a506b26b7297c491e31871782a164fbdd0f348aeca"
+          },
+          "expected_status": "row_width_error"
+        },
+        {
+          "id": "empty",
+          "source": {
+            "text": "",
+            "encoding": "UTF-8",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "expected_status": "empty_input"
+        },
+        {
+          "id": "header-only",
+          "source": {
+            "text": "id,title,price,availability,link\n",
+            "encoding": "UTF-8",
+            "sha256": "c51ff82e65ccbe6d246f9c740b60aea0fda0c97542981c9c4f1537e900d5a35a"
+          },
+          "expected_status": "empty_dataset",
+          "expected_record_count": 0
+        },
+        {
+          "id": "semicolon-delimiter",
+          "source": {
+            "text": "id;title;price;availability;link\n000123;Desk lamp;20.00 USD;in_stock;https://example.invalid/p/000123\n",
+            "encoding": "UTF-8",
+            "sha256": "3c2eb2d7bc9279b4e098f7ac18aef93905b1ff60905dc71e0be20f8d7845db2a"
+          },
+          "expected_status": "unsupported_delimiter_or_schema_error"
+        }
+      ],
+      "expected_common": {
+        "usable_partial_records": false,
+        "automatic_structural_repairs": 0,
+        "csv_export_enabled": false,
+        "previous_result_export_enabled": false
+      },
+      "checks": [
+        "Empty dataset is a named empty result, not proof that a feed passed meaningful product checks.",
+        "Unsupported delimiters are not silently guessed.",
+        "Changed CSV input invalidates old export eligibility even when the new parse fails."
+      ]
+    },
+    {
+      "id": "header-ambiguity",
+      "variants": [
+        {
+          "id": "missing-required",
+          "source": {
+            "text": "id,title,price,link\na,Lamp,20.00 USD,https://example.invalid/p/a\n",
+            "encoding": "UTF-8",
+            "sha256": "25decf59b57904aff9fed56817f0a8a60c8c100a69b050367612d5188a42fd0f"
+          },
+          "issue": "missing-required-column",
+          "field": "availability"
+        },
+        {
+          "id": "duplicate-exact",
+          "source": {
+            "text": "id,id,title,price,availability,link\nfirst,second,Lamp,20.00 USD,in_stock,https://example.invalid/p/a\n",
+            "encoding": "UTF-8",
+            "sha256": "b3960117980771768569249bff37acd45f9ebf3c637cc336d485d0a9d27a58c9"
+          },
+          "issue": "ambiguous-column-identity"
+        },
+        {
+          "id": "empty-header",
+          "source": {
+            "text": "id,title,price,availability,link,\na,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/a,preserve-me\n",
+            "encoding": "UTF-8",
+            "sha256": "ce8b74996a9214b96e9bb2dbf1870c5c2ed650060c95fd68356d1439795fda5f"
+          },
+          "issue": "unnamed-column"
+        },
+        {
+          "id": "normalization-collision",
+          "source": {
+            "text": "id,title,price,availability,link, ID \nfirst,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/first,second\n",
+            "encoding": "UTF-8",
+            "sha256": "ff70f2c018465fb78cb9c3da0586501bf73476f7941c1cf06ddb8b8544b0146b"
+          },
+          "issue": "ambiguous-id-mapping"
+        }
+      ],
+      "expected_common": {
+        "automatic_mapping_allowed": false,
+        "silent_column_overwrite": false,
+        "csv_export_enabled_until_explicit_resolution": false,
+        "original_cells_preserved": true
+      },
+      "checks": [
+        "The collision fixture may be rejected or require explicit distinct-column mapping; selecting a silent first or last id is forbidden.",
+        "Do not trim headers globally then overwrite values in an object."
+      ]
+    },
+    {
+      "id": "availability-preview-apply-undo",
+      "source": {
+        "text": "id,title,price,availability,link\nn-001,Desk lamp,20.00 USD,In Stock,https://example.invalid/p/n-001\nn-002,Desk lamp,20.00 USD,out of stock,https://example.invalid/p/n-002\nn-003,Desk lamp,20.00 USD,preorder,https://example.invalid/p/n-003\nn-004,Desk lamp,20.00 USD,backorder,https://example.invalid/p/n-004\nn-005,Desk lamp,20.00 USD,available soon,https://example.invalid/p/n-005\n",
+        "encoding": "UTF-8",
+        "sha256": "0676842b670f8b1dd0c5d4cd05e2c05a3a5f6183008bd37ee2db4d27857a53de"
+      },
+      "expected_initial": {
+        "proposed_changes": [
+          {
+            "record": 1,
+            "column": "availability",
+            "before": "In Stock",
+            "after": "in_stock",
+            "reason": "availability-spelling"
+          },
+          {
+            "record": 2,
+            "column": "availability",
+            "before": "out of stock",
+            "after": "out_of_stock",
+            "reason": "availability-spelling"
+          }
+        ],
+        "applied_changes": 0,
+        "unresolved": [
+          {
+            "record": 5,
+            "column": "availability",
+            "reason": "unknown-availability",
+            "value": "available soon"
+          }
+        ],
+        "canonical_unchanged_records": [
+          3,
+          4
+        ]
+      },
+      "actions": [
+        {
+          "action": "apply_proposal",
+          "record": 1,
+          "column": "availability",
+          "expected_cell": "in_stock",
+          "expected_active_change_count": 1,
+          "expected_remaining_proposal_count": 1
+        },
+        {
+          "action": "apply_proposal",
+          "record": 2,
+          "column": "availability",
+          "expected_cell": "out_of_stock",
+          "expected_active_change_count": 2,
+          "expected_remaining_proposal_count": 0
+        },
+        {
+          "action": "revalidate_twice",
+          "expected_added_mutations": 0,
+          "expected_remaining_proposal_count": 0,
+          "expected_unresolved_count": 1
+        },
+        {
+          "action": "undo_last_change",
+          "expected_record": 2,
+          "expected_column": "availability",
+          "expected_cell": "out of stock",
+          "expected_active_change_count": 1,
+          "expected_remaining_proposal_count": 1
+        }
+      ],
+      "expected_invariants": [
+        "Only the explicitly accepted named cells change.",
+        "Unknown availability remains exactly as entered; no stock claim is inferred.",
+        "preorder and backorder remain unchanged under the selected profile."
+      ]
+    },
+    {
+      "id": "facts-remain-unresolved",
+      "source": {
+        "text": "id,title,price,availability,link,gtin,optional_date\nsku-102,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/sku-102,,03/04/26\nsku-102,,20.00 USD,in_stock,https://example.invalid/p/sku-102,,\nsku-103,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/sku-103,12345,\nsku-104,Desk lamp,-5 USD,in_stock,https://example.invalid/p/sku-104,,\nsku-105,Desk lamp,\"1,234\",in_stock,https://example.invalid/p/sku-105,,\n",
+        "encoding": "UTF-8",
+        "sha256": "2ba734f44bbd63d6141c467812c287ab170d770130f57a43d475f2a43a5fa1ea"
+      },
+      "expected": {
+        "records_unchanged": [
+          [
+            "sku-102",
+            "Desk lamp",
+            "20.00 USD",
+            "in_stock",
+            "https://example.invalid/p/sku-102",
+            "",
+            "03/04/26"
+          ],
+          [
+            "sku-102",
+            "",
+            "20.00 USD",
+            "in_stock",
+            "https://example.invalid/p/sku-102",
+            "",
+            ""
+          ],
+          [
+            "sku-103",
+            "Desk lamp",
+            "20.00 USD",
+            "in_stock",
+            "https://example.invalid/p/sku-103",
+            "12345",
+            ""
+          ],
+          [
+            "sku-104",
+            "Desk lamp",
+            "-5 USD",
+            "in_stock",
+            "https://example.invalid/p/sku-104",
+            "",
+            ""
+          ],
+          [
+            "sku-105",
+            "Desk lamp",
+            "1,234",
+            "in_stock",
+            "https://example.invalid/p/sku-105",
+            "",
+            ""
+          ]
+        ],
+        "data_record_count": 5,
+        "automatic_change_count": 0,
+        "product_issue_count": 6,
+        "formula_risk_issue_count": 1,
+        "total_issue_count": 7,
+        "affected_data_record_count": 5,
+        "issues": [
+          {
+            "record": 1,
+            "column": "id",
+            "reason": "duplicate-id",
+            "value": "sku-102",
+            "related_records": [
+              1,
+              2
+            ]
+          },
+          {
+            "record": 2,
+            "column": "id",
+            "reason": "duplicate-id",
+            "value": "sku-102",
+            "related_records": [
+              1,
+              2
+            ]
+          },
+          {
+            "record": 2,
+            "column": "title",
+            "reason": "missing-title",
+            "value": ""
+          },
+          {
+            "record": 3,
+            "column": "gtin",
+            "reason": "invalid-gtin",
+            "value": "12345"
+          },
+          {
+            "record": 4,
+            "column": "price",
+            "reason": "invalid-price",
+            "value": "-5 USD"
+          },
+          {
+            "record": 5,
+            "column": "price",
+            "reason": "ambiguous-price-or-missing-currency",
+            "value": "1,234"
+          },
+          {
+            "record": 4,
+            "column": "price",
+            "reason": "formula-risk",
+            "value": "-5 USD"
+          }
+        ],
+        "optional_date_inference": false,
+        "csv_export_enabled": false
+      },
+      "checks": [
+        "Duplicate IDs are one collision group but two affected row-level issues; report these counts separately.",
+        "Do not emit several price issues for one failed profile price field; use one compound diagnostic.",
+        "Invalid negative price and formula export risk are separate reasons, not duplicate automatic repairs.",
+        "No rows are dropped or merged, and no title, GTIN, currency or interpreted date is invented."
+      ]
+    },
+    {
+      "id": "formula-and-markup-policy",
+      "source": {
+        "text": "id,title,price,availability,link,gtin,notes\n=1+1,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/r-001,,\nr-002,+1+1,20.00 USD,in_stock,https://example.invalid/p/r-002,,\nr-003,Desk lamp,-1+1,in_stock,https://example.invalid/p/r-003,,\nr-004,Desk lamp,20.00 USD,\"@SUM(1,1)\",https://example.invalid/p/r-004,,\nr-005,Desk lamp,20.00 USD,in_stock,\t=1+1,,\nr-006,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/r-006,\"\n=1+1\",\nr-007,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/r-007,,\"\r=1+1\"\n  =1+1,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/r-008,,\nr-009,＝1+1,20.00 USD,in_stock,https://example.invalid/p/r-009,,\nr-010,Desk lamp,＋1+1,in_stock,https://example.invalid/p/r-010,,\nr-011,Desk lamp,20.00 USD,－1+1,https://example.invalid/p/r-011,,\nr-012,Desk lamp,20.00 USD,in_stock,\"＠SUM(1,1)\",,\nr-013,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/r-013,\"=HYPERLINK(\"\"https://example.invalid\"\",\"\"open\"\"),\"\"quoted\"\"\",\nr-xss,\"<img src=x onerror=\"\"globalThis.__feedFixtureXss=1\"\">\",20.00 USD,in_stock,https://example.invalid/p/r-xss,,not markup\n",
+        "encoding": "UTF-8",
+        "sha256": "fc89925369f207fb994fbb739956bffdee4ffc3b53cd564da1c3d4337f9851e8"
+      },
+      "expected": {
+        "formula_risk_cells": [
+          {
+            "record": 1,
+            "column": "id",
+            "value": "=1+1"
+          },
+          {
+            "record": 2,
+            "column": "title",
+            "value": "+1+1"
+          },
+          {
+            "record": 3,
+            "column": "price",
+            "value": "-1+1"
+          },
+          {
+            "record": 4,
+            "column": "availability",
+            "value": "@SUM(1,1)"
+          },
+          {
+            "record": 5,
+            "column": "link",
+            "value": "\t=1+1"
+          },
+          {
+            "record": 6,
+            "column": "gtin",
+            "value": "\n=1+1"
+          },
+          {
+            "record": 7,
+            "column": "notes",
+            "value": "\r=1+1"
+          },
+          {
+            "record": 8,
+            "column": "id",
+            "value": "  =1+1"
+          },
+          {
+            "record": 9,
+            "column": "title",
+            "value": "＝1+1"
+          },
+          {
+            "record": 10,
+            "column": "price",
+            "value": "＋1+1"
+          },
+          {
+            "record": 11,
+            "column": "availability",
+            "value": "－1+1"
+          },
+          {
+            "record": 12,
+            "column": "link",
+            "value": "＠SUM(1,1)"
+          },
+          {
+            "record": 13,
+            "column": "gtin",
+            "value": "=HYPERLINK(\"https://example.invalid\",\"open\"),\"quoted\""
+          }
+        ],
+        "formula_risk_count": 13,
+        "csv_export_enabled": false,
+        "json_preserves_all_original_cells": true,
+        "rendered_as_text": true,
+        "data_record_count": 14,
+        "markup_cell": {
+          "record": 14,
+          "column": "title",
+          "value": "<img src=x onerror=\"globalThis.__feedFixtureXss=1\">"
+        },
+        "markup_created_dom_elements": 0,
+        "data_triggered_network_requests": 0,
+        "script_execution_count": 0,
+        "automatic_apostrophe_or_tab_prefixes": 0
+      },
+      "header_variant": {
+        "source": {
+          "text": "id,title,price,availability,link,=1+1\nh-001,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/h-001,plain text\n",
+          "encoding": "UTF-8",
+          "sha256": "1ce5c98a0ca157e2a37bff9d4e42874662bd99d9a1df007cfd5c36610ac000b7"
+        },
+        "expected_header_formula_risks": [
+          {
+            "column_index": 5,
+            "value": "=1+1"
+          }
+        ],
+        "csv_export_enabled": false
+      },
+      "actions": [
+        {
+          "action": "acknowledge_or_ignore_risk_without_changing_value",
+          "expected_csv_export_enabled": false
+        },
+        {
+          "action": "explicitly_replace_every_risky_data_value_with_safe_fixture_values",
+          "replacement_records": [
+            [
+              "safe-001",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-001",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-002",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-002",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-003",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-003",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-004",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-004",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-005",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-005",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-006",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-006",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-007",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-007",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-008",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-008",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-009",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-009",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-010",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-010",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-011",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-011",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-012",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-012",
+              "",
+              "safe text"
+            ],
+            [
+              "safe-013",
+              "Desk lamp",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/safe-013",
+              "",
+              "safe text"
+            ],
+            [
+              "r-xss",
+              "<img src=x onerror=\"globalThis.__feedFixtureXss=1\">",
+              "20.00 USD",
+              "in_stock",
+              "https://example.invalid/p/r-xss",
+              "",
+              "not markup"
+            ]
+          ],
+          "expected_remaining_formula_risks": 0,
+          "expected_csv_export_enabled": true,
+          "expected_markup_remains_literal": true
+        }
+      ],
+      "checks": [
+        "Formula policy inspects every column and headers, after leading ASCII whitespace/control removal and full-width trigger normalization for detection only.",
+        "Detection never normalizes stored source cells.",
+        "CSV quoting must keep the separator/quote payload inside its original cell.",
+        "Other profile issues may coexist; exact formula risk counts here are counted independently of those issues.",
+        "Only an explicit content correction can resolve a formula risk; dismissing a warning does not make risky CSV safe."
+      ]
+    },
+    {
+      "id": "job-decisions-undo-and-replay",
+      "source": {
+        "text": "id,title,price,availability,link,gtin\nu-001,Desk lamp,20.00 USD,In Stock,https://example.invalid/p/u-001,\nu-002,,20.00 USD,backorder,https://example.invalid/p/u-002,\n",
+        "encoding": "UTF-8",
+        "sha256": "fa18f73bf25337fa28671c3f80c0d2cce60226ea1be10ff943243e79537ec7fc"
+      },
+      "actions": [
+        {
+          "action": "preview",
+          "expected_active_change_count": 0,
+          "expected_proposal_count": 1,
+          "expected_unresolved": [
+            {
+              "record": 2,
+              "column": "title",
+              "reason": "missing-title"
+            }
+          ]
+        },
+        {
+          "action": "accept_availability_normalization",
+          "record": 1,
+          "column": "availability",
+          "expected_before": "In Stock",
+          "expected_after": "in_stock",
+          "expected_active_change_count": 1
+        },
+        {
+          "action": "manual_source_correction",
+          "record": 2,
+          "column": "title",
+          "entered_value": "Foldable Desk Lamp",
+          "expected_before": "",
+          "expected_after": "Foldable Desk Lamp",
+          "expected_active_change_count": 2,
+          "expected_missing_title_issues": 0,
+          "provenance": "synthetic operator correction, not inferred product evidence"
+        },
+        {
+          "action": "undo_last_change",
+          "expected_record": 2,
+          "expected_column": "title",
+          "expected_after": "",
+          "expected_active_change_count": 1,
+          "expected_missing_title_issues": 1
+        },
+        {
+          "action": "export_job_then_reopen",
+          "expected_same_original_source": true,
+          "expected_same_source_hash": true,
+          "expected_same_profile_and_rule_version": true,
+          "expected_same_current_cells": true,
+          "expected_same_decision_and_undo_state": true,
+          "expected_same_unresolved_issues": true
+        },
+        {
+          "action": "revalidate_twice",
+          "expected_added_changes": 0,
+          "expected_added_decisions": 0,
+          "expected_active_change_count": 1,
+          "expected_missing_title_issues": 1
+        }
+      ],
+      "expected_final_records": [
+        [
+          "u-001",
+          "Desk lamp",
+          "20.00 USD",
+          "in_stock",
+          "https://example.invalid/p/u-001",
+          ""
+        ],
+        [
+          "u-002",
+          "",
+          "20.00 USD",
+          "backorder",
+          "https://example.invalid/p/u-002",
+          ""
+        ]
+      ],
+      "job_integrity_mutations": [
+        {
+          "mutation": "malformed JSON",
+          "expected": "reject"
+        },
+        {
+          "mutation": "unsupported job format version",
+          "expected": "reject"
+        },
+        {
+          "mutation": "change original content without changing declared source hash",
+          "expected": "reject"
+        },
+        {
+          "mutation": "change stored current cell so it differs from replaying approved changes",
+          "expected": "reject"
+        },
+        {
+          "mutation": "alter change before-value so it no longer matches its target original/prior value",
+          "expected": "reject"
+        },
+        {
+          "mutation": "target a change at a nonexistent logical record or column",
+          "expected": "reject"
+        }
+      ],
+      "expected_on_each_invalid_job_import": {
+        "current_valid_job_unchanged": true,
+        "source_and_working_values_unchanged": true,
+        "decisions_unchanged": true,
+        "export_eligibility_unchanged": true,
+        "visible_error": true
+      },
+      "checks": [
+        "Hash checks prove consistency with the imported content only, not authorship or product truth.",
+        "Import must replay or equivalently verify the change ledger, not trust stored result cells independently.",
+        "No application-specific JSON field names are imposed; adapt these mutations to the implementation schema."
+      ]
+    },
+    {
+      "id": "stale-export-and-persistence",
+      "source_a": {
+        "text": "id,title,price,availability,link\n000123,Desk lamp,20.00 USD,in_stock,https://example.invalid/p/000123\n",
+        "encoding": "UTF-8",
+        "sha256": "8a023d718f98a198d6b34b7ba7e8ed3753c46dde1b82520ac85138b20033f2b3"
+      },
+      "invalid_source_b": {
+        "text": "id,title,price,link\nb-001,Other product,30.00 USD,https://example.invalid/p/b-001\n",
+        "encoding": "UTF-8",
+        "sha256": "210ab44ea417031f528c8c48d3c9f5290b4a2d1ac6aa6d0a79cf7aea5d6d43fe"
+      },
+      "actions": [
+        {
+          "action": "load_valid_a",
+          "expected_current_id": "000123",
+          "expected_csv_export_enabled": true
+        },
+        {
+          "action": "edit_source_text_without_revalidating",
+          "expected_csv_export_enabled": false,
+          "expected_reason": "source-differs-from-validated-job"
+        },
+        {
+          "action": "load_invalid_b",
+          "expected_current_input": "invalid_source_b",
+          "expected_visible_schema_failure": true,
+          "expected_csv_export_enabled": false,
+          "expected_prior_a_downloads_exposed_as_current": false
+        },
+        {
+          "action": "restore_valid_a_then_import_invalid_job",
+          "expected_current_job_after_rejection": "source_a",
+          "expected_csv_export_enabled": true
+        },
+        {
+          "action": "choose_no_persistence_and_reload",
+          "expected_no_silent_restoration_claim": true,
+          "expected_no_job_write_to_browser_storage": true
+        },
+        {
+          "action": "opt_in_to_persistence_save_valid_a_and_reload",
+          "expected_current_id": "000123",
+          "expected_original_source_hash_matches": true,
+          "expected_current_cells_and_decisions_match": true
+        },
+        {
+          "action": "simulate_storage_write_failure",
+          "expected_saved_claim": false,
+          "expected_unsaved_state_visible": true,
+          "expected_in_memory_work_preserved": true
+        },
+        {
+          "action": "download_csv_and_json_for_current_valid_job",
+          "expected_csv_reparse_equals_visible_matrix": true,
+          "expected_json_reopens_same_job": true,
+          "expected_filenames_and_messages_do_not_claim_other_source": true
+        },
+        {
+          "action": "observe_network_during_import_repair_export",
+          "expected_file_content_or_cell_values_sent": false,
+          "expected_remote_runtime_requests": 0
+        }
+      ],
+      "checks": [
+        "Invalid CSV replacement invalidates stale CSV outputs; invalid JSON job import is transactional and preserves the current job. These are intentionally different operations.",
+        "A initiated-download message is not evidence of a saved file: acceptance inspects the actual downloads.",
+        "Persistence is an explicit displayed choice; local data is not uploaded."
+      ]
+    }
+  ],
+  "execution_status": "Fixtures prepared only; no app implementation or browser tests run by this file generation."
+}

@@ -1,0 +1,67 @@
+# Prepared for GitHub Pages at https://<owner>.github.io/feed-repair-desk/ (the Vite base is /feed-repair-desk/).
+#
+# This workflow is manual only. It never runs on push, and it will fail harmlessly
+# until the release owner enables GitHub Pages (Settings > Pages > Source: GitHub Actions).
+# The deploy job runs only after the same verification steps as CI succeed.
+name: Deploy to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify-and-build:
+    name: Verify and build the static site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+      - run: npm run privacy-check
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests against the production build
+        run: npx playwright test
+        env:
+          CI: 'true'
+
+      - name: Upload the verified build as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy the verified build
+    needs: verify-and-build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,38 @@
+{
+  "name": "feed-repair-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local, browser-only product CSV repair workbench. Inspect exact proposed changes, keep unresolved product facts visible, and export a reviewable handoff.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "privacy-check": "node scripts/privacy-check.mjs",
+    "check": "npm run typecheck && npm run test && npm run build && npm run privacy-check"
+  },
+  "dependencies": {
+    "papaparse": "^5.5.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "^24.0.0",
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.1"
+  }
+}
